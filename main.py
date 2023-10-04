@@ -4,6 +4,7 @@ import datetime
 import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
+from typing import Optional
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -11,7 +12,7 @@ logging.basicConfig(
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends explanation on how to use the bot."""
-    await update.message.reply_text(f"Hi!\nUse /set to start tracking the event.\nUse /unset to stop tracking the event.\nUse /{CONFIG['COMMAND']} to reset the event.")
+    await update.message.reply_text(f"Hi!\nUse /set to start tracking the event.\nUse /unset to stop tracking the event.\nUse /{CONFIG['COMMAND']} to reset the event.", message_thread_id=update.effective_message.message_thread_id)
 
 
 async def count_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -21,17 +22,17 @@ async def count_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open("./last_date.txt", "w", encoding="utf8") as file:
         file.write(datetime.datetime.strftime(datetime.date.today(), "%Y-%m-%d"))
 
-    await send_days_message(context, update.effective_chat.id)
+    await send_days_message(context, update.effective_chat.id, update.effective_message.message_thread_id)
 
 
-async def send_days_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
+async def send_days_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_thread_id: Optional[int]=None) -> None:
     with open("./last_date.txt", "r", encoding="utf8") as file:
         date_string = datetime.datetime.strptime(file.read(), "%Y-%m-%d").date()
     
     delta = abs(datetime.date.today() - date_string).days
     
     await context.bot.send_message(
-        chat_id, text=f"It has been {delta} days since {CONFIG['EVENT_NAME']}."
+        chat_id, text=f"It has been {delta} days since {CONFIG['EVENT_NAME']}.", message_thread_id=message_thread_id
     )
 
 
@@ -39,8 +40,9 @@ async def alarm(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send the alarm message."""
 
     job = context.job
+    message_thread_id = job.data
 
-    await send_days_message(context, job.chat_id)
+    await send_days_message(context, job.chat_id, message_thread_id)
 
 
 def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -61,6 +63,7 @@ async def set_timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Add a job to the queue."""
 
     chat_id = update.effective_message.chat_id
+    message_thread_id = update.effective_message.message_thread_id
 
     try:
         job_removed = remove_job_if_exists(str(chat_id), context)
@@ -69,7 +72,8 @@ async def set_timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             alarm,
             job_kwargs=CONFIG["REMINDER"],
             chat_id=str(chat_id),
-            name=str(chat_id)
+            name=str(chat_id),
+            data=message_thread_id
         )
 
         text = "Event tracking successfully started!"
@@ -77,18 +81,19 @@ async def set_timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if job_removed:
             text += " Old one was removed."
 
-        await update.effective_message.reply_text(text)
+        await update.effective_message.reply_text(text, message_thread_id=message_thread_id)
 
-        await send_days_message(context, update.effective_chat.id)
+        await send_days_message(context, update.effective_chat.id, message_thread_id)
 
     except (IndexError, ValueError):
-        await update.effective_message.reply_text("Usage: /start")
+        await update.effective_message.reply_text("Usage: /start", message_thread_id=message_thread_id)
 
 
 async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Remove the job if the user changed their mind."""
 
-    chat_id = update.message.chat_id
+    chat_id = update.effective_message.chat_id
+    message_thread_id = update.effective_message.message_thread_id
 
     job_removed = remove_job_if_exists(str(chat_id), context)
 
@@ -96,7 +101,7 @@ async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Event tracking successfully cancelled!" if job_removed else "You are no longer tracking the event."
     )
 
-    await update.message.reply_text(text)
+    await update.message.reply_text(text, message_thread_id=message_thread_id)
 
 
 def main():
