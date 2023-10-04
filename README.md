@@ -27,7 +27,7 @@ source ./venv/bin/activate
 Install the requirements:
 
 ```shell
-pip install requirements.txt
+pip install -r requirements.txt
 ```
 
 Set your bot token in the `config.py` file, and modify the other options as necessary.
